@@ -1,0 +1,2 @@
+{"timestamp": "2025-10-30T19:52:28.753242Z", "event": "DB_ACTION", "details": {"action": "seed_user", "user": "pedro"}}
+{"timestamp": "2025-10-30T19:53:00.402674Z", "event": "LOGIN_FAIL", "details": {"user": "augusto", "reason": "no_user"}}
