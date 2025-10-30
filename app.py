@@ -29,7 +29,7 @@ def get_db_conn():
 class LoginApp:
     def __init__(self, master):
         self.master = master
-        master.title("Grupo 9 — Demo Login Seguro")
+        master.title("Grupo 7 — Demo Login Seguro")
         master.resizable(False, False)
 
         # Username

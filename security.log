@@ -1,2 +1,19 @@
 {"timestamp": "2025-10-30T19:52:28.753242Z", "event": "DB_ACTION", "details": {"action": "seed_user", "user": "pedro"}}
 {"timestamp": "2025-10-30T19:53:00.402674Z", "event": "LOGIN_FAIL", "details": {"user": "augusto", "reason": "no_user"}}
+{"timestamp": "2025-10-30T19:58:32.536107Z", "event": "LOGIN_FAIL", "details": {"user": "pedro", "reason": "validation"}}
+{"timestamp": "2025-10-30T19:58:38.170818Z", "event": "LOGIN_FAIL", "details": {"user": "Pedro", "reason": "validation"}}
+{"timestamp": "2025-10-30T19:58:42.281304Z", "event": "LOGIN_FAIL", "details": {"user": "Pedro", "reason": "validation"}}
+{"timestamp": "2025-10-30T19:59:11.150703Z", "event": "LOGIN_FAIL", "details": {"user": "pedro", "reason": "validation"}}
+{"timestamp": "2025-10-30T20:03:29.548738Z", "event": "LOGIN_FAIL", "details": {"user": "pedro", "reason": "validation"}}
+{"timestamp": "2025-10-30T20:04:55.281031Z", "event": "LOGIN_FAIL", "details": {"user": "pedro", "reason": "bad_credentials", "attempts": 1}}
+{"timestamp": "2025-10-30T20:05:04.273910Z", "event": "LOGIN_FAIL", "details": {"user": "pedro", "reason": "validation"}}
+{"timestamp": "2025-10-30T20:12:02.910233Z", "event": "DB_ACTION", "details": {"action": "seed_user", "user": "augusto"}}
+{"timestamp": "2025-10-30T20:12:03.316516Z", "event": "DB_ACTION", "details": {"action": "seed_user", "user": "maite"}}
+{"timestamp": "2025-10-30T20:12:03.766292Z", "event": "DB_ACTION", "details": {"action": "seed_user", "user": "maximo"}}
+{"timestamp": "2025-10-30T20:12:04.139462Z", "event": "DB_ACTION", "details": {"action": "update_user_seed", "user": "pedro"}}
+{"timestamp": "2025-10-30T20:12:04.627079Z", "event": "DB_ACTION", "details": {"action": "seed_user", "user": "nicole"}}
+{"timestamp": "2025-10-30T20:13:00.957839Z", "event": "LOGIN_SUCCESS", "details": {"user": "augusto", "role": "user"}}
+{"timestamp": "2025-10-30T20:13:15.215352Z", "event": "LOGIN_SUCCESS", "details": {"user": "maximo", "role": "user"}}
+{"timestamp": "2025-10-30T20:13:19.810899Z", "event": "LOGIN_SUCCESS", "details": {"user": "pedro", "role": "admin"}}
+{"timestamp": "2025-10-30T20:13:25.051418Z", "event": "LOGIN_FAIL", "details": {"user": "bauti", "reason": "no_user"}}
+{"timestamp": "2025-10-30T20:13:28.189749Z", "event": "LOGIN_FAIL", "details": {"user": "bautista", "reason": "no_user"}}
