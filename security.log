@@ -21,3 +21,12 @@
 {"timestamp": "2025-10-31T00:04:06.373906Z", "event": "LOGIN_FAIL", "details": {"user": "pedro' OR '1'='1", "reason": "validation"}}
 {"timestamp": "2025-10-31T00:04:18.561484Z", "event": "LOGIN_FAIL", "details": {"user": "'pedro' OR '1'='1'", "reason": "validation"}}
 {"timestamp": "2025-10-31T00:42:42.794307Z", "event": "LOGIN_SUCCESS", "details": {"user": "augusto", "role": "user"}}
+{"timestamp": "2025-10-31T03:21:04.474307Z", "event": "DB_ACTION", "details": {"action": "update_user_seed", "user": "augusto", "role": "admin"}}
+{"timestamp": "2025-10-31T03:21:04.730065Z", "event": "DB_ACTION", "details": {"action": "update_user_seed", "user": "maite", "role": "user"}}
+{"timestamp": "2025-10-31T03:21:05.085315Z", "event": "DB_ACTION", "details": {"action": "update_user_seed", "user": "maximo", "role": "user"}}
+{"timestamp": "2025-10-31T03:21:05.326500Z", "event": "DB_ACTION", "details": {"action": "update_user_seed", "user": "pedro", "role": "user"}}
+{"timestamp": "2025-10-31T03:21:05.596460Z", "event": "DB_ACTION", "details": {"action": "update_user_seed", "user": "nicole", "role": "user"}}
+{"timestamp": "2025-10-31T03:22:11.656332Z", "event": "LOGIN_FAIL", "details": {"user": "pedro", "reason": "bad_credentials", "attempts": 1}}
+{"timestamp": "2025-10-31T03:22:26.202183Z", "event": "LOGIN_FAIL", "details": {"user": "pedro", "reason": "bad_credentials", "attempts": 2}}
+{"timestamp": "2025-10-31T03:22:55.253445Z", "event": "LOGIN_SUCCESS", "details": {"user": "pedro", "role": "user"}}
+{"timestamp": "2025-10-31T03:23:04.540123Z", "event": "LOGIN_SUCCESS", "details": {"user": "augusto", "role": "admin"}}
