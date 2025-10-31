@@ -30,3 +30,5 @@
 {"timestamp": "2025-10-31T03:22:26.202183Z", "event": "LOGIN_FAIL", "details": {"user": "pedro", "reason": "bad_credentials", "attempts": 2}}
 {"timestamp": "2025-10-31T03:22:55.253445Z", "event": "LOGIN_SUCCESS", "details": {"user": "pedro", "role": "user"}}
 {"timestamp": "2025-10-31T03:23:04.540123Z", "event": "LOGIN_SUCCESS", "details": {"user": "augusto", "role": "admin"}}
+{"timestamp": "2025-10-31T04:27:31.863309Z", "event": "LOGIN_SUCCESS", "details": {"user": "augusto", "role": "admin", "last_login": "2025-10-31T04:27:31.846201"}}
+{"timestamp": "2025-10-31T04:30:23.127026Z", "event": "LOGIN_SUCCESS", "details": {"user": "maximo", "role": "user", "last_login": "2025-10-31T04:30:23.109609"}}
