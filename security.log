@@ -17,3 +17,7 @@
 {"timestamp": "2025-10-30T20:13:19.810899Z", "event": "LOGIN_SUCCESS", "details": {"user": "pedro", "role": "admin"}}
 {"timestamp": "2025-10-30T20:13:25.051418Z", "event": "LOGIN_FAIL", "details": {"user": "bauti", "reason": "no_user"}}
 {"timestamp": "2025-10-30T20:13:28.189749Z", "event": "LOGIN_FAIL", "details": {"user": "bautista", "reason": "no_user"}}
+{"timestamp": "2025-10-31T00:03:57.523293Z", "event": "LOGIN_FAIL", "details": {"user": "pedro' OR '1'='1", "reason": "validation"}}
+{"timestamp": "2025-10-31T00:04:06.373906Z", "event": "LOGIN_FAIL", "details": {"user": "pedro' OR '1'='1", "reason": "validation"}}
+{"timestamp": "2025-10-31T00:04:18.561484Z", "event": "LOGIN_FAIL", "details": {"user": "'pedro' OR '1'='1'", "reason": "validation"}}
+{"timestamp": "2025-10-31T00:42:42.794307Z", "event": "LOGIN_SUCCESS", "details": {"user": "augusto", "role": "user"}}
