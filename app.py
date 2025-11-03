@@ -1,400 +1,153 @@
+# app.py
 #!/usr/bin/env python3
-# app.py — Grupo 7
-# Login para todos + Panel de Administración (solo admins)
-# Admin: pestaña Usuarios (tabla + reset bloqueo + cambiar rol + resetear contraseña + export CSV)
-#        pestaña Logs (visor/buscar/exportar)
-
-import os, sqlite3, csv, secrets
-from datetime import datetime, timedelta
+# App integrada — versión reforzada con security_hardening
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, filedialog
+import sqlite3
+from pathlib import Path
+from datetime import datetime
+from security_hardening import secure_login, secure_register, rotate_log_if_needed, get_conn
+from utils import read_remembered_user, write_remembered_user, forget_remembered_user, log_event, DB_PATH
 
-from utils import (
-    verify_password, valid_username, valid_password,
-    log_event, LOGFILE, hash_password
-)
-
-DB_PATH = os.path.join("data", "app.db")
-LOCK_THRESHOLD = 5
-LOCK_DURATION_SECONDS = 60 * 5
-REMEMBER_FILE = "remember.txt"
-
-def get_db_conn():
-    return sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
-
-def read_remembered_user():
-    try:
-        if os.path.exists(REMEMBER_FILE):
-            return open(REMEMBER_FILE, "r", encoding="utf-8").read().strip()
-    except Exception:
-        pass
-    return ""
-
-def write_remembered_user(username):
-    try:
-        open(REMEMBER_FILE, "w", encoding="utf-8").write(username or "")
-    except Exception:
-        pass
-
-def last_log_entries(n=500):
-    if not os.path.exists(LOGFILE):
-        return []
-    with open(LOGFILE, "r", encoding="utf-8") as f:
-        return [ln.rstrip("\n") for ln in f][-n:]
-
+# UI principal
 class SecureLoginUI:
     def __init__(self, root):
         self.root = root
-        root.title("Grupo 7 — Demo Login Seguro")
-        root.geometry("760x460"); root.minsize(720, 440); root.resizable(True, True)
-
-        style = ttk.Style()
-        try: style.theme_use("clam")
-        except tk.TclError: pass
-        style.configure("Title.TLabel", font=("Segoe UI", 14, "bold"))
-        style.configure("Help.TLabel",  font=("Segoe UI", 9))
-        style.configure("Hint.TLabel",  foreground="#1f4b99")
-        style.configure("Status.TLabel", anchor="w")
-
-        container = ttk.Frame(root, padding=(14, 12, 14, 10))
-        container.pack(fill="both", expand=True)
-        container.columnconfigure(0, weight=2)
-        container.columnconfigure(1, weight=3)
-        container.rowconfigure(1, weight=1)
-
-        ttk.Label(container, text="Demo: Login seguro (Grupo 7)", style="Title.TLabel")\
-            .grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
-
-        left = ttk.LabelFrame(container, text="Acceso", padding=(12, 10))
-        left.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
-        left.columnconfigure(1, weight=1)
-
-        ttk.Label(left, text="Usuario:").grid(row=0, column=0, sticky="e", pady=6)
+        root.title("Login — TP IS Grupo7")
+        root.geometry("780x380")
         self.username_var = tk.StringVar(value=read_remembered_user())
-        self.username_entry = ttk.Entry(left, textvariable=self.username_var, width=28)
-        self.username_entry.grid(row=0, column=1, sticky="we", pady=6, padx=(8,0))
-
-        ttk.Label(left, text="Contraseña:").grid(row=1, column=0, sticky="e", pady=6)
         self.password_var = tk.StringVar()
-        self.password_entry = ttk.Entry(left, textvariable=self.password_var, width=28, show="*")
-        self.password_entry.grid(row=1, column=1, sticky="we", pady=6, padx=(8,0))
-
         self.show_pw_var = tk.BooleanVar(value=False)
+        self.remember_var = tk.BooleanVar(value=bool(read_remembered_user()))
+
+        container = ttk.Frame(root, padding=(12,12))
+        container.pack(expand=True, fill="both")
+
+        left = ttk.Frame(container)
+        left.grid(row=0, column=0, sticky="n")
+
+        ttk.Label(left, text="Usuario:").grid(row=0, column=0, sticky="w")
+        ttk.Entry(left, textvariable=self.username_var, width=30).grid(row=0, column=1, pady=(0,8))
+        ttk.Label(left, text="Contraseña:").grid(row=1, column=0, sticky="w")
+        self.password_entry = ttk.Entry(left, show="*", textvariable=self.password_var, width=30)
+        self.password_entry.grid(row=1, column=1, pady=(0,8))
+
         ttk.Checkbutton(left, text="Mostrar contraseña", variable=self.show_pw_var,
                         command=lambda: self.password_entry.config(show="" if self.show_pw_var.get() else "*"))\
-            .grid(row=2, column=1, sticky="w", pady=(0, 4))
+            .grid(row=2, column=1, sticky="w", pady=(0,4))
 
-        self.remember_var = tk.BooleanVar(value=bool(read_remembered_user()))
-        ttk.Checkbutton(left, text="Recordarme", variable=self.remember_var)\
-            .grid(row=3, column=1, sticky="w", pady=(0, 8))
+        ttk.Checkbutton(left, text="Recordarme", variable=self.remember_var).grid(row=3, column=1, sticky="w", pady=(0,8))
+
+        # Botón "Olvidar recordarme"
+        ttk.Button(left, text="Olvidar recordatorio", command=self.forget_remember).grid(row=3, column=0, sticky="w", pady=(0,8))
 
         btns = ttk.Frame(left); btns.grid(row=4, column=0, columnspan=2, pady=(2, 0))
         ttk.Button(btns, text="Iniciar sesión", command=self.attempt_login).grid(row=0, column=0, padx=(0,8))
-        ttk.Button(btns, text="Registrarse",   command=self.open_register_window).grid(row=0, column=1)
+        ttk.Button(btns, text="Registrarse", command=self.open_register_window).grid(row=0, column=1)
 
-        right = ttk.LabelFrame(container, text="Información", padding=(12, 10))
-        right.grid(row=1, column=1, sticky="nsew")
-        right.columnconfigure(0, weight=1)
-
-        self.status_msg = tk.StringVar(value="Listo")
-        ttk.Label(right, text="Estado:").grid(row=0, column=0, sticky="w")
-        ttk.Label(right, textvariable=self.status_msg, style="Hint.TLabel").grid(row=1, column=0, sticky="w", pady=(0,8))
-
-        help_text = ("Prueba SQLi: intenta `pedro' OR '1'='1` (debe fallar).\n"
-                     "Bloqueo: 6 intentos fallidos ⇒ bloqueo temporal.\n"
-                     "Panel Admin (logs/usuarios): solo para rol 'admin'.")
-        ttk.Label(right, text=help_text, style="Help.TLabel", wraplength=360, justify="left")\
-            .grid(row=2, column=0, sticky="we", pady=(10,0))
-
-        self.statusbar = ttk.Label(root, text=" ", style="Status.TLabel", relief="sunken")
-        self.statusbar.pack(side="bottom", fill="x")
-
-        self.current_user = None
-        self.current_role = None
+        # Panel info a la derecha
+        right = ttk.LabelFrame(container, text="Información", padding=(12,10))
+        right.grid(row=0, column=1, padx=(12,0), sticky="n")
+        self.status = tk.StringVar(value="Listo.")
+        ttk.Label(right, textvariable=self.status, width=40).pack()
+        ttk.Separator(right, orient="horizontal").pack(fill="x", pady=8)
+        ttk.Label(right, text="Logs recientes:").pack(anchor="w")
+        self.logs_txt = scrolledtext.ScrolledText(right, height=12, width=50, state="disabled")
+        self.logs_txt.pack()
 
         root.bind("<Return>", lambda e: self.attempt_login())
-        self.username_entry.focus_set()
+        self.refresh_logs_view()
 
-    def set_status(self, txt, sticky=False):
-        self.statusbar.config(text=txt)
-        if not sticky:
-            self.root.after(5000, lambda: self.statusbar.config(text=" "))
+    def set_status(self, txt, error=False):
+        self.status.set(txt)
+
+    def refresh_logs_view(self):
+        rotate_log_if_needed()
+        logf = Path("data") / "security.log"
+        lines = []
+        if logf.exists():
+            try:
+                lines = logf.read_text(encoding="utf-8").splitlines()[-10:]
+            except Exception:
+                lines = []
+        self.logs_txt.config(state="normal")
+        self.logs_txt.delete("1.0", "end")
+        self.logs_txt.insert("end", "\n".join(lines))
+        self.logs_txt.config(state="disabled")
+
+    def forget_remember(self):
+        forget_remembered_user()
+        self.username_var.set("")
+        self.remember_var.set(False)
+        messagebox.showinfo("Recordatorio", "Recordatorio eliminado.")
+        self.set_status("Recordatorio borrado.")
 
     def attempt_login(self):
         user = (self.username_var.get() or "").strip()
-        pw   = (self.password_var.get() or "").strip()
+        pw = (self.password_var.get() or "").strip()
 
-        if not valid_username(user):
-            messagebox.showerror("Error", "Usuario inválido (formato).")
-            log_event("LOGIN_FAIL", {"user": user, "reason": "validation_username"})
-            self.set_status("Formato de usuario inválido."); return
-        if not valid_password(pw):
-            messagebox.showerror("Error", "Contraseña inválida (mín. 6).")
-            log_event("LOGIN_FAIL", {"user": user, "reason": "validation_password"})
-            self.set_status("Formato de contraseña inválido."); return
-
-        conn = get_db_conn(); cur = conn.cursor()
-        cur.execute("SELECT id, pw_hash, pw_salt, intentos_fallidos, bloqueado_hasta, rol FROM usuarios WHERE nombre = ?", (user,))
-        row = cur.fetchone()
-        if not row:
-            messagebox.showerror("Error", "Usuario o contraseña incorrectos.")
-            log_event("LOGIN_FAIL", {"user": user, "reason": "no_user"})
-            self.set_status("Login fallido."); conn.close(); return
-
-        uid, pw_hash, pw_salt, intentos, bloqueado_hasta, rol = row
-
-        if bloqueado_hasta:
-            try: until = datetime.fromisoformat(bloqueado_hasta)
-            except Exception: until = None
-            if until and until > datetime.utcnow():
-                remaining = int((until - datetime.utcnow()).total_seconds())
-                messagebox.showwarning("Bloqueado", f"Usuario bloqueado. Intenta en {remaining}s.")
-                log_event("LOGIN_BLOCKED", {"user": user, "blocked_until": until.isoformat()})
-                self.set_status("Usuario bloqueado temporalmente.", True)
-                conn.close(); return
+        # Llamada al login robusto
+        success, msg, userrow = secure_login(user, pw, performed_by=user)
+        if success:
+            # persistir recordatorio si corresponde
+            if self.remember_var.get():
+                write_remembered_user(user)
             else:
-                cur.execute("UPDATE usuarios SET intentos_fallidos=0, bloqueado_hasta=NULL WHERE id=?", (uid,))
-                conn.commit(); intentos = 0
-
-        if verify_password(pw, pw_hash, pw_salt):
-            now_iso = datetime.utcnow().isoformat()
-            cur.execute("""
-                UPDATE usuarios 
-                SET intentos_fallidos = 0, bloqueado_hasta = NULL,
-                    login_count = COALESCE(login_count, 0) + 1,
-                    last_login = ?
-                WHERE id = ?
-            """, (now_iso, uid))
-            conn.commit()
-            log_event("LOGIN_SUCCESS", {"user": user, "role": rol, "last_login": now_iso})
-            self.current_user, self.current_role = user, rol
-            write_remembered_user(user if self.remember_var.get() else "")
-            messagebox.showinfo("OK", f"Acceso concedido. Rol: {rol}")
-            self.set_status(f"Bienvenido {user} ({rol}).", True)
-            conn.close()
-
-            if (rol or "").lower() == "admin":
+                forget_remembered_user()
+            self.set_status("Login correcto.")
+            # si es admin, abrir panel, si no, abrir pantalla usuario
+            rol = userrow.get("rol") if userrow else None
+            if rol == "admin":
                 AdminPanel(self.root, current_user=user)
-            return
-        else:
-            intentos = (intentos or 0) + 1
-            if intentos >= LOCK_THRESHOLD:
-                until = (datetime.utcnow() + timedelta(seconds=LOCK_DURATION_SECONDS)).isoformat()
-                cur.execute("UPDATE usuarios SET intentos_fallidos=?, bloqueado_hasta=? WHERE id=?",
-                            (intentos, until, uid))
-                conn.commit()
-                log_event("LOGIN_FAIL", {"user": user, "reason": "too_many_attempts", "attempts": intentos})
-                log_event("LOGIN_BLOCKED", {"user": user, "blocked_until": until})
-                messagebox.showwarning("Bloqueado", "Usuario bloqueado por múltiples intentos.")
-                self.set_status("Usuario bloqueado por intentos fallidos.", True)
             else:
-                cur.execute("UPDATE usuarios SET intentos_fallidos=? WHERE id=?", (intentos, uid))
-                conn.commit()
-                log_event("LOGIN_FAIL", {"user": user, "reason": "bad_credentials", "attempts": intentos})
-                messagebox.showerror("Error", "Usuario o contraseña incorrectos.")
-                self.set_status(f"Intentos fallidos: {intentos}")
-            conn.close(); return
+                UserPanel(self.root, current_user=user, last_login=userrow.get("last_login"))
+        else:
+            messagebox.showerror("Error", msg)
+            self.set_status(msg, True)
+        self.refresh_logs_view()
 
     def open_register_window(self):
-        win = tk.Toplevel(self.root); win.title("Registrarse - Nuevo usuario"); win.resizable(False, False)
-        frm = ttk.Frame(win, padding=(12, 10)); frm.pack(fill="both", expand=True)
+        win = tk.Toplevel(self.root)
+        win.title("Registro")
+        ttk.Label(win, text="Usuario:").grid(row=0, column=0, sticky="w")
+        uvar = tk.StringVar()
+        ttk.Entry(win, textvariable=uvar).grid(row=0, column=1, pady=(4,8))
+        ttk.Label(win, text="Contraseña:").grid(row=1, column=0, sticky="w")
+        pvar = tk.StringVar()
+        ttk.Entry(win, textvariable=pvar, show="*").grid(row=1, column=1, pady=(4,8))
+        def do_register():
+            u = (uvar.get() or "").strip()
+            p = (pvar.get() or "").strip()
+            ok, message = secure_register(u, p)
+            if ok:
+                messagebox.showinfo("OK", "Usuario creado. Podés iniciar sesión.")
+                win.destroy()
+            else:
+                messagebox.showerror("Error", message)
+        ttk.Button(win, text="Crear", command=do_register).grid(row=2, column=0, columnspan=2, pady=(8,8))
 
-        ttk.Label(frm, text="Usuario:").grid(row=0, column=0, sticky="e", pady=4)
-        uvar = tk.StringVar(); uentry = ttk.Entry(frm, textvariable=uvar, width=28); uentry.grid(row=0, column=1, padx=(8,0), pady=4)
+# Panel mínimo para usuarios (no admin)
+class UserPanel:
+    def __init__(self, parent, current_user="user", last_login=None):
+        self.win = tk.Toplevel(parent)
+        self.win.title(f"Bienvenido — {current_user}")
+        ttk.Label(self.win, text=f"Usuario: {current_user}").pack(pady=(8,4))
+        ttk.Label(self.win, text=f"Último login (UTC): {last_login or 'Nunca'}").pack(pady=(0,8))
+        ttk.Button(self.win, text="Cerrar sesión", command=self.win.destroy).pack(pady=(8,8))
 
-        ttk.Label(frm, text="Contraseña:").grid(row=1, column=0, sticky="e", pady=4)
-        pvar = tk.StringVar(); pentry = ttk.Entry(frm, textvariable=pvar, width=28, show="*"); pentry.grid(row=1, column=1, padx=(8,0), pady=4)
-
-        show = tk.BooleanVar(value=False)
-        ttk.Checkbutton(frm, text="Mostrar contraseña", variable=show,
-                        command=lambda: pentry.config(show="" if show.get() else "*")).grid(row=2, column=1, sticky="w")
-
-        ttk.Button(frm, text="Crear cuenta", command=lambda: self._do_register(uvar, pvar, win))\
-            .grid(row=3, column=0, columnspan=2, pady=(8,0))
-        uentry.focus_set()
-
-    def _do_register(self, uvar, pvar, win):
-        u = (uvar.get() or "").strip()
-        p = (pvar.get() or "").strip()
-        if not valid_username(u):
-            messagebox.showerror("Error","Usuario inválido (3-32; letras/números/._-)")
-            return
-        if not valid_password(p):
-            messagebox.showerror("Error","Contraseña inválida (mínimo 6)")
-            return
-        conn=get_db_conn(); cur=conn.cursor()
-        cur.execute("SELECT id FROM usuarios WHERE nombre=?", (u,))
-        if cur.fetchone():
-            messagebox.showerror("Error","Usuario ya existe."); conn.close(); return
-        h,s = hash_password(p)
-        cur.execute("INSERT INTO usuarios (nombre,pw_hash,pw_salt,rol) VALUES (?,?,?,?)",(u,h,s,"user"))
-        conn.commit(); conn.close()
-        log_event("DB_ACTION", {"action":"register_user","user":u})
-        messagebox.showinfo("OK","Usuario creado. Podés iniciar sesión.")
-        win.destroy()
-
+# Panel admin (ya tenías uno; este es minimal para la demo)
 class AdminPanel:
     def __init__(self, parent, current_user="admin"):
         self.parent = parent
         self.win = tk.Toplevel(parent)
         self.win.title(f"Panel de Administración — {current_user}")
         self.win.geometry("980x560"); self.win.minsize(900, 520)
-        self.current_user = current_user
-
-        nb = ttk.Notebook(self.win)
-        nb.pack(fill="both", expand=True)
-
-        self.tab_users = ttk.Frame(nb, padding=10); nb.add(self.tab_users, text="Usuarios")
-        self.build_users_tab()
-
-        self.tab_logs = ttk.Frame(nb, padding=10); nb.add(self.tab_logs, text="Logs")
-        self.build_logs_tab()
-
-    def build_users_tab(self):
-        top = ttk.Frame(self.tab_users); top.pack(fill="x", pady=(0,8))
-        ttk.Button(top, text="Refrescar", command=self.load_users).pack(side="left")
-        ttk.Button(top, text="Resetear bloqueo", command=self.reset_lock_selected).pack(side="left", padx=6)
-        ttk.Button(top, text="Cambiar rol (admin↔user)", command=self.toggle_role_selected).pack(side="left", padx=6)
-        ttk.Button(top, text="Resetear contraseña", command=self.reset_password_selected).pack(side="left", padx=6)
-        ttk.Button(top, text="Exportar usuarios CSV", command=self.export_users_csv).pack(side="left", padx=12)
-
-        self.cols = ("id","nombre","rol","intentos_fallidos","bloqueado_hasta","login_count","last_login")
-        self.tree = ttk.Treeview(self.tab_users, columns=self.cols, show="headings", height=18)
-        widths = (60,180,90,130,200,110,200)
-        for c, w in zip(self.cols, widths):
-            self.tree.heading(c, text=c)
-            self.tree.column(c, width=w, anchor="w")
-        self.tree.pack(fill="both", expand=True)
-        self.load_users()
-
-    def load_users(self):
-        for i in self.tree.get_children():
-            self.tree.delete(i)
-        conn=get_db_conn(); cur=conn.cursor()
-        for row in cur.execute("""
-            SELECT id, nombre, rol, intentos_fallidos, IFNULL(bloqueado_hasta,''),
-                   COALESCE(login_count,0), IFNULL(last_login,'')
-            FROM usuarios ORDER BY nombre
-        """):
-            self.tree.insert("", "end", values=row)
-        conn.close()
-
-    def _selected_user(self):
-        sel = self.tree.selection()
-        if not sel:
-            messagebox.showinfo("Información","Seleccioná un usuario en la tabla.")
-            return None
-        vals = self.tree.item(sel[0],"values")
-        return {"id": int(vals[0]), "nombre": vals[1], "rol": vals[2]}
-
-    def reset_lock_selected(self):
-        u = self._selected_user()
-        if not u: return
-        conn=get_db_conn(); cur=conn.cursor()
-        cur.execute("UPDATE usuarios SET intentos_fallidos=0, bloqueado_hasta=NULL WHERE id=?", (u["id"],))
-        conn.commit(); conn.close()
-        log_event("DB_ACTION", {"action":"reset_lock","user":u["nombre"]})
-        self.load_users()
-        messagebox.showinfo("OK", f"Bloqueo reseteado para {u['nombre']}")
-
-    def toggle_role_selected(self):
-        u = self._selected_user()
-        if not u: return
-        new_role = "user" if u["rol"].lower()=="admin" else "admin"
-        conn=get_db_conn(); cur=conn.cursor()
-        cur.execute("UPDATE usuarios SET rol=? WHERE id=?", (new_role, u["id"]))
-        conn.commit(); conn.close()
-        log_event("DB_ACTION", {"action":"toggle_role","user":u["nombre"], "new_role":new_role})
-        self.load_users()
-        messagebox.showinfo("OK", f"Rol de {u['nombre']} cambiado a {new_role}")
-
-    def reset_password_selected(self):
-        u = self._selected_user()
-        if not u: return
-        temp_pw = secrets.token_urlsafe(8)
-        pw_hash, pw_salt = hash_password(temp_pw)
-        conn=get_db_conn(); cur=conn.cursor()
-        cur.execute("UPDATE usuarios SET pw_hash=?, pw_salt=? WHERE id=?", (pw_hash, pw_salt, u["id"]))
-        conn.commit(); conn.close()
-        log_event("DB_ACTION", {"action":"admin_reset_password","user":u["nombre"]})
-        messagebox.showinfo(
-            "Contraseña temporal",
-            f"Contraseña temporal para {u['nombre']}:\n\n{temp_pw}\n\n"
-            "Se muestra solo una vez. Comunicala por un canal controlado y pedí cambio al próximo inicio."
-        )
-
-    def export_users_csv(self):
-        path = filedialog.asksaveasfilename(
-            title="Exportar usuarios",
-            defaultextension=".csv",
-            filetypes=[("CSV","*.csv"),("Todos","*.*")]
-        )
-        if not path: return
-        conn=get_db_conn(); cur=conn.cursor()
-        rows = list(cur.execute("""
-            SELECT id, nombre, rol, intentos_fallidos, IFNULL(bloqueado_hasta,''),
-                   COALESCE(login_count,0), IFNULL(last_login,'')
-            FROM usuarios ORDER BY nombre
-        """))
-        conn.close()
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(["id","nombre","rol","intentos_fallidos","bloqueado_hasta","login_count","last_login"])
-            w.writerows(rows)
-        messagebox.showinfo("Exportar", f"Usuarios exportados a:\n{path}")
-
-    def build_logs_tab(self):
-        actions = ttk.Frame(self.tab_logs); actions.pack(fill="x", pady=(0,8))
-        ttk.Button(actions, text="Refrescar", command=self.populate_logs).pack(side="left")
-        ttk.Button(actions, text="Exportar…", command=self.export_logs).pack(side="left", padx=6)
-
-        ttk.Label(actions, text="Buscar:").pack(side="left", padx=(12,4))
-        self.search_var = tk.StringVar()
-        ttk.Entry(actions, textvariable=self.search_var, width=32).pack(side="left")
-        ttk.Button(actions, text="Ir", command=self.search_in_logs).pack(side="left", padx=4)
-
-        self.txt = scrolledtext.ScrolledText(self.tab_logs, wrap="none", font=("Consolas", 10))
-        self.txt.pack(fill="both", expand=True)
-        self.populate_logs()
-
-    def populate_logs(self):
-        lines = last_log_entries(500)
-        self.txt.config(state="normal"); self.txt.delete("1.0","end")
-        self.txt.insert("end", "\n".join(lines) if lines else "No hay registros aún.\n")
-        self.txt.config(state="disabled")
-
-    def search_in_logs(self):
-        pat = (self.search_var.get() or "").strip()
-        if not pat: return
-        self.txt.tag_configure("hit", background="#fff59d")
-        self.txt.tag_remove("hit", "1.0", "end")
-        start = "1.0"; hits = 0
-        while True:
-            idx = self.txt.search(pat, start, stopindex="end", nocase=True)
-            if not idx: break
-            last = f"{idx}+{len(pat)}c"
-            self.txt.tag_add("hit", idx, last)
-            start = last; hits += 1
-        if hits == 0:
-            messagebox.showinfo("Búsqueda", "No hubo coincidencias.")
-
-    def export_logs(self):
-        lines = last_log_entries(500)
-        if not lines:
-            messagebox.showinfo("Exportar", "No hay registros para exportar.")
-            return
-        path = filedialog.asksaveasfilename(
-            title="Exportar logs",
-            defaultextension=".txt",
-            filetypes=[("Texto", "*.txt"), ("Todos", "*.*")]
-        )
-        if not path: return
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines))
-        messagebox.showinfo("Exportar", f"Logs exportados a:\n{path}")
+        ttk.Label(self.win, text=f"Sesión admin: {current_user}").pack(pady=10)
+        ttk.Button(self.win, text="Cerrar", command=self.win.destroy).pack(pady=6)
 
 if __name__ == "__main__":
-    if not os.path.exists(DB_PATH):
+    # Verificación simple de DB y arranque
+    if not DB_PATH.exists():
         messagebox.showerror("Error", f"DB no encontrada. Ejecutá setup_db.py primero. ({DB_PATH})")
         print("DB not found. Run setup_db.py first.")
     else:

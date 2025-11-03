@@ -1,0 +1,4 @@
+{"ts": "2025-11-03T23:12:38.333776+00:00", "event": "LOGIN_FAIL", "user": "augusto", "by": "augusto", "reason": "bad_credentials", "attempts": 1}
+{"ts": "2025-11-03T23:13:01.246685+00:00", "event": "LOGIN_FAIL_INJECTION_DETECTED", "user": "augusto", "by": "augusto"}
+{"ts": "2025-11-03T23:13:08.782317+00:00", "event": "LOGIN_FAIL_INJECTION_DETECTED", "user": "augusto", "by": "augusto"}
+{"ts": "2025-11-03T23:13:15.868499+00:00", "event": "LOGIN_FAIL_INJECTION_DETECTED", "user": "augusto", "by": "augusto"}
