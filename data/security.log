@@ -1,4 +1,25 @@
-{"ts": "2025-11-03T23:12:38.333776+00:00", "event": "LOGIN_FAIL", "user": "augusto", "by": "augusto", "reason": "bad_credentials", "attempts": 1}
-{"ts": "2025-11-03T23:13:01.246685+00:00", "event": "LOGIN_FAIL_INJECTION_DETECTED", "user": "augusto", "by": "augusto"}
-{"ts": "2025-11-03T23:13:08.782317+00:00", "event": "LOGIN_FAIL_INJECTION_DETECTED", "user": "augusto", "by": "augusto"}
-{"ts": "2025-11-03T23:13:15.868499+00:00", "event": "LOGIN_FAIL_INJECTION_DETECTED", "user": "augusto", "by": "augusto"}
+{"ts": "2025-11-05T22:14:15.373595+00:00", "event": "LOGIN_FAIL", "user": "Maite", "by": "Maite", "reason": "bad_credentials", "attempts": 1}
+{"ts": "2025-11-05T22:14:18.136904+00:00", "event": "LOGIN_FAIL", "user": "Maite", "by": "Maite", "reason": "bad_credentials", "attempts": 2}
+{"ts": "2025-11-05T22:14:20.147846+00:00", "event": "LOGIN_FAIL", "user": "Maite", "by": "Maite", "reason": "bad_credentials", "attempts": 3}
+{"ts": "2025-11-05T22:14:21.996677+00:00", "event": "LOGIN_FAIL", "user": "Maite", "by": "Maite", "reason": "bad_credentials", "attempts": 4}
+{"ts": "2025-11-05T22:14:24.107736+00:00", "event": "LOGIN_FAIL", "user": "Maite", "by": "Maite", "reason": "locked", "attempts": 5, "blocked_until": "2025-11-05T22:19:24.088764+00:00"}
+{"ts": "2025-11-05T22:15:13.053985+00:00", "event": "LOGIN_SUCCESS", "user": "Augusto", "by": "Augusto"}
+{"ts": "2025-11-05T22:15:40.660959+00:00", "event": "LOGIN_SUCCESS", "user": "Pedro", "by": "Pedro"}
+{"ts": "2025-11-05T22:15:43.039592+00:00", "event": "LOGIN_SUCCESS", "user": "Pedro", "by": "Pedro"}
+{"ts": "2025-11-05T22:15:49.863490+00:00", "event": "LOGIN_SUCCESS", "user": "Maximo", "by": "Maximo"}
+{"ts": "2025-11-05T22:15:52.204591+00:00", "event": "LOGIN_SUCCESS", "user": "Maximo", "by": "Maximo"}
+{"ts": "2025-11-05T22:15:54.033859+00:00", "event": "LOGIN_SUCCESS", "user": "Maximo", "by": "Maximo"}
+{"ts": "2025-11-05T22:16:03.159790+00:00", "event": "LOGIN_SUCCESS", "user": "Nicole", "by": "Nicole"}
+{"ts": "2025-11-05T22:16:04.791087+00:00", "event": "LOGIN_SUCCESS", "user": "Nicole", "by": "Nicole"}
+{"ts": "2025-11-05T22:16:06.130350+00:00", "event": "LOGIN_SUCCESS", "user": "Nicole", "by": "Nicole"}
+{"ts": "2025-11-05T22:16:15.453048+00:00", "event": "LOGIN_FAIL", "user": "Bautista", "by": "Bautista", "reason": "bad_credentials", "attempts": 1}
+{"ts": "2025-11-05T22:16:17.276387+00:00", "event": "LOGIN_FAIL", "user": "Bautista", "by": "Bautista", "reason": "bad_credentials", "attempts": 2}
+{"ts": "2025-11-05T22:16:21.841674+00:00", "event": "LOGIN_SUCCESS", "user": "Bautista", "by": "Bautista"}
+{"ts": "2025-11-05T22:16:23.697058+00:00", "event": "LOGIN_SUCCESS", "user": "Bautista", "by": "Bautista"}
+{"ts": "2025-11-05T22:16:25.755721+00:00", "event": "LOGIN_SUCCESS", "user": "Bautista", "by": "Bautista"}
+{"ts": "2025-11-05T22:16:27.269589+00:00", "event": "LOGIN_SUCCESS", "user": "Bautista", "by": "Bautista"}
+{"ts": "2025-11-05T22:16:28.720211+00:00", "event": "LOGIN_SUCCESS", "user": "Bautista", "by": "Bautista"}
+{"ts": "2025-11-05T22:16:34.613343+00:00", "event": "LOGIN_FAIL", "user": "Augusto", "by": "Augusto", "reason": "bad_credentials", "attempts": 1}
+{"ts": "2025-11-05T22:16:49.835250+00:00", "event": "LOGIN_SUCCESS", "user": "Augusto", "by": "Augusto"}
+{"ts": "2025-11-05T22:30:26.104057+00:00", "event": "LOGIN_FAIL_INJECTION_DETECTED", "user": "Nicole", "by": "Nicole"}
+{"ts": "2025-11-05T22:30:46.000325+00:00", "event": "LOGIN_FAIL_INJECTION_DETECTED", "user": "Nicole", "by": "Nicole"}

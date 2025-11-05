@@ -12,6 +12,7 @@ import hmac
 import json
 import re
 from datetime import datetime, timezone, timedelta
+from typing import Tuple, Optional, Dict, Any
 
 # Rutas relativas al archivo
 BASE_DIR = Path(__file__).resolve().parent
@@ -73,7 +74,7 @@ def valid_username_format(username: str) -> bool:
     return bool(USERNAME_RE.match(username or ""))
 
 
-def valid_password_policy(password: str) -> (bool, str):
+def valid_password_policy(password: str) -> Tuple[bool, str]:
     if not password or len(password) < PWD_MIN_LEN:
         return False, f"Contraseña debe tener al menos {PWD_MIN_LEN} caracteres."
     if not re.search(r"[0-9]", password):
@@ -108,14 +109,11 @@ def rotate_log_if_needed(max_bytes: int = 5 * 1024 * 1024):
 
 
 # ---------- Login robusto (usa queries parametrizadas internamente) ----------
-def secure_login(username: str, password: str, performed_by: str = None) -> (bool, str, dict):
-    """
-    Intenta loguear y aplica:
-      - detección simple de patrones SQL (para demo)
-      - bloqueo por intentos (LOCK_THRESHOLD)
-      - verificación PBKDF2
-    Devuelve (success, message, user_row_dict_or_None)
-    """
+def secure_login(
+    username: str,
+    password: str,
+    performed_by: Optional[str] = None
+) -> Tuple[bool, str, Dict[str, Any]]:
     rotate_log_if_needed()
 
     if detect_sql_injection(username) or detect_sql_injection(password):
@@ -128,54 +126,65 @@ def secure_login(username: str, password: str, performed_by: str = None) -> (boo
 
     with get_conn() as conn:
         cur = conn.cursor()
+        cur.execute("PRAGMA table_info(usuarios)")
+        cols = {r[1] for r in cur.fetchall()}
+
         cur.execute("SELECT * FROM usuarios WHERE nombre = ?", (username,))
         row = cur.fetchone()
         if row is None:
             audit_event("LOGIN_FAIL", {"user": username, "by": performed_by, "reason": "no_such_user"})
             return False, "Usuario o contraseña incorrectos.", None
 
-        # revisar bloqueo
-        blocked_until = row["bloqueado_hasta"]
-        if blocked_until:
+        # bloqueo activo
+        bloqueado_hasta = row["bloqueado_hasta"] if "bloqueado_hasta" in row.keys() else None
+        if bloqueado_hasta:
             try:
-                dt = datetime.fromisoformat(blocked_until)
+                dt = datetime.fromisoformat(bloqueado_hasta)
                 if dt > datetime.now(timezone.utc):
-                    audit_event("LOGIN_BLOCKED", {"user": username, "blocked_until": blocked_until, "by": performed_by})
-                    return False, f"Cuenta bloqueada hasta {blocked_until}.", None
+                    audit_event("LOGIN_BLOCKED", {"user": username, "blocked_until": bloqueado_hasta, "by": performed_by})
+                    return False, f"Cuenta bloqueada hasta {bloqueado_hasta}.", None
             except Exception:
                 pass
 
-        # verificar contraseña
+        # compat: pw_salt separado o salt:hash en pw_hash
         stored = row["pw_hash"]
+        if "pw_salt" in cols and row["pw_salt"]:
+            stored = f"{row['pw_salt']}:{row['pw_hash']}"
+
         if verify_password(stored, password):
-            # reset intentos y actualizar last_login / login_count
             now_iso = datetime.now(timezone.utc).isoformat()
-            cur.execute("""
-                UPDATE usuarios
-                SET intentos_fallidos = 0, bloqueado_hasta = NULL, login_count = COALESCE(login_count,0) + 1, last_login = ?
-                WHERE nombre = ?
-            """, (now_iso, username))
-            conn.commit()
+            try:
+                cur.execute("""
+                    UPDATE usuarios
+                    SET intentos_fallidos = 0,
+                        bloqueado_hasta = NULL,
+                        login_count = COALESCE(login_count,0) + 1,
+                        last_login = ?
+                    WHERE nombre = ?
+                """, (now_iso, username))
+                conn.commit()
+            except Exception as e:
+                audit_event("DB_ERROR", {"action": "login_update", "error": str(e)})
             audit_event("LOGIN_SUCCESS", {"user": username, "by": performed_by})
             return True, "Login correcto.", dict(row)
         else:
-            # incrementar intentos
-            attempts = (row["intentos_fallidos"] or 0) + 1
-            if attempts >= LOCK_THRESHOLD:
-                until = (datetime.now(timezone.utc) + timedelta(seconds=LOCK_DURATION_SECONDS)).isoformat()
-                cur.execute("UPDATE usuarios SET intentos_fallidos=?, bloqueado_hasta=? WHERE nombre=?", (attempts, until, username))
-                conn.commit()
-                audit_event("LOGIN_FAIL", {"user": username, "by": performed_by, "reason": "locked", "attempts": attempts, "blocked_until": until})
-                return False, f"Cuenta bloqueada por múltiples intentos (hasta {until}).", None
-            else:
-                cur.execute("UPDATE usuarios SET intentos_fallidos=? WHERE nombre=?", (attempts, username))
-                conn.commit()
-                audit_event("LOGIN_FAIL", {"user": username, "by": performed_by, "reason": "bad_credentials", "attempts": attempts})
-                return False, f"Usuario o contraseña incorrectos. Intentos: {attempts}", None
-
+            intentos = (row["intentos_fallidos"] or 0) + 1 if "intentos_fallidos" in row.keys() else 1
+            if "intentos_fallidos" in row.keys():
+                if intentos >= LOCK_THRESHOLD:
+                    until = (datetime.now(timezone.utc) + timedelta(seconds=LOCK_DURATION_SECONDS)).isoformat()
+                    cur.execute("UPDATE usuarios SET intentos_fallidos=?, bloqueado_hasta=? WHERE nombre=?",
+                                (intentos, until, username))
+                    conn.commit()
+                    audit_event("LOGIN_FAIL", {"user": username, "by": performed_by, "reason": "locked", "attempts": intentos, "blocked_until": until})
+                    return False, f"Cuenta bloqueada por múltiples intentos (hasta {until}).", None
+                else:
+                    cur.execute("UPDATE usuarios SET intentos_fallidos=? WHERE nombre=?", (intentos, username))
+                    conn.commit()
+            audit_event("LOGIN_FAIL", {"user": username, "by": performed_by, "reason": "bad_credentials", "attempts": intentos})
+            return False, f"Usuario o contraseña incorrectos. Intentos: {intentos}", None
 
 # ---------- Registro seguro ----------
-def secure_register(username: str, password: str, rol: str = "user") -> (bool, str):
+def secure_register(username: str, password: str, rol: str = "user") -> Tuple[bool, str]:
     if detect_sql_injection(username) or detect_sql_injection(password):
         return False, "Entrada con caracteres no permitidos."
     if not valid_username_format(username):
@@ -185,14 +194,122 @@ def secure_register(username: str, password: str, rol: str = "user") -> (bool, s
         return False, msg
 
     salt = generate_salt()
-    pw_hash = hash_password(password, salt)
+    # usamos el mismo KDF, pero preparamos dos formatos:
+    #  - combinado "salt:hash" (para esquemas sin pw_salt)
+    #  - separado (salt_hex + hash_hex) si existe pw_salt
+    kdf = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERS)
+    salt_hex = salt.hex()
+    hash_hex = kdf.hex()
+    combined = f"{salt_hex}:{hash_hex}"
+
     with get_conn() as conn:
         cur = conn.cursor()
+        # detectar columnas
+        cur.execute("PRAGMA table_info(usuarios)")
+        cols = {r[1] for r in cur.fetchall()}
         try:
-            cur.execute("INSERT INTO usuarios (nombre, pw_hash, rol) VALUES (?, ?, ?)", (username, pw_hash, rol))
+            if "pw_salt" in cols:
+                # esquema viejo: columnas separadas
+                cur.execute("INSERT INTO usuarios (nombre, pw_hash, pw_salt, rol) VALUES (?, ?, ?, ?)",
+                            (username, hash_hex, salt_hex, rol))
+            else:
+                # esquema nuevo: todo en pw_hash
+                cur.execute("INSERT INTO usuarios (nombre, pw_hash, rol) VALUES (?, ?, ?)",
+                            (username, combined, rol))
             conn.commit()
             audit_event("USER_CREATED", {"user": username})
             return True, "Usuario creado."
+        except sqlite3.IntegrityError:
+            return False, "El usuario ya existe."
+        except Exception as e:
+            audit_event("DB_ERROR", {"action": "create_user", "error": str(e)})
+            return False, "Error interno al crear usuario."
+
+# --- helpers ---
+
+def _get_user_table_cols(cur) -> Dict[str, Dict[str, Any]]:
+    """
+    Devuelve {colname: {notnull: 0/1, dflt_value: str|None, pk: 0/1, type: 'TEXT'|...}}
+    """
+    cur.execute("PRAGMA table_info(usuarios)")
+    cols = {}
+    for cid, name, ctype, notnull, dflt, pk in cur.fetchall():
+        cols[name] = {"type": ctype, "notnull": notnull, "dflt": dflt, "pk": pk}
+    return cols
+
+def _defaults_for_missing_cols(cols: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Genera defaults seguros para columnas NOT NULL que no llenamos explícitamente.
+    No toca PK autoincrement ni timestamps si tienen default.
+    """
+    defaults = {}
+    for name, meta in cols.items():
+        if name in {"id", "nombre", "pw_hash", "pw_salt", "rol"}:
+            continue
+        if meta["notnull"] and meta["dflt"] is None:
+            # Default seguro por tipo
+            t = (meta["type"] or "").upper()
+            if "INT" in t or "NUM" in t:
+                defaults[name] = 0
+            else:
+                defaults[name] = ""  # TEXT/otros
+    return defaults
+# --- fin helpers nuevos ---
+
+def secure_register(username: str, password: str, rol: str = "user") -> Tuple[bool, str]:
+    if detect_sql_injection(username) or detect_sql_injection(password):
+        return False, "Entrada con caracteres no permitidos."
+    if not valid_username_format(username):
+        return False, "Formato de usuario inválido."
+    ok, msg = valid_password_policy(password)
+    if not ok:
+        return False, msg
+
+    # Derivamos hash/salt (formato dual)
+    salt = generate_salt()
+    kdf = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERS)
+    salt_hex = salt.hex()
+    hash_hex = kdf.hex()
+    combined = f"{salt_hex}:{hash_hex}"
+
+    with get_conn() as conn:
+        cur = conn.cursor()
+        try:
+            cols = _get_user_table_cols(cur)
+            # chequeo existencia usuario
+            cur.execute("SELECT 1 FROM usuarios WHERE nombre = ?", (username,))
+            if cur.fetchone():
+                return False, "El usuario ya existe."
+
+            # armamos el INSERT según esquema presente
+            insert_cols = []
+            insert_vals = []
+
+            insert_cols.append("nombre");   insert_vals.append(username)
+            if "pw_salt" in cols:  # esquema con columnas separadas
+                insert_cols.extend(["pw_hash", "pw_salt"])
+                insert_vals.extend([hash_hex, salt_hex])
+            else:                   # esquema combinado
+                insert_cols.append("pw_hash")
+                insert_vals.append(combined)
+
+            # rol si existe
+            if "rol" in cols:
+                insert_cols.append("rol")
+                insert_vals.append(rol)
+
+            # rellenar NOT NULL extra sin default
+            extra = _defaults_for_missing_cols(cols)
+            for k, v in extra.items():
+                if k not in insert_cols:
+                    insert_cols.append(k); insert_vals.append(v)
+
+            sql = f"INSERT INTO usuarios ({', '.join(insert_cols)}) VALUES ({', '.join(['?']*len(insert_vals))})"
+            cur.execute(sql, tuple(insert_vals))
+            conn.commit()
+            audit_event("USER_CREATED", {"user": username, "insert_cols": insert_cols})
+            return True, "Usuario creado."
+
         except sqlite3.IntegrityError:
             return False, "El usuario ya existe."
         except Exception as e:
