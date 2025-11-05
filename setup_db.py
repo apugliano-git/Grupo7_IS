@@ -1,68 +1,83 @@
 #!/usr/bin/env python3
-# setup_db.py
-# Crea la DB SQLite con tablas necesarias y siembra varios usuarios
+# setup_db.py — Inicializa SQLite y siembra usuarios del Grupo 7
+
 import sqlite3
-import os
-from utils import hash_password, log_event
+from security_hardening import (
+    DB_PATH,               # Path('data/app.db')
+    audit_event,           # auditoría JSON-line
+    generate_salt,         # salt seguro
+    PBKDF2_ITERS           # mismas iteraciones PBKDF2
+)
+import hashlib
 
-DB_DIR = "data"
-DB_PATH = os.path.join(DB_DIR, "app.db")
+# ------------------------------------------------------------------ #
+# Esquema base (compatible con formato separado pw_hash/pw_salt)
+# ------------------------------------------------------------------ #
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS usuarios (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre            TEXT UNIQUE NOT NULL,
+    pw_hash           TEXT NOT NULL,         -- hash hex (si hay pw_salt -> hash puro)
+    pw_salt           TEXT NOT NULL,         -- salt hex (obligatorio en este esquema)
+    rol               TEXT NOT NULL DEFAULT 'user',
+    intentos_fallidos INTEGER NOT NULL DEFAULT 0,
+    bloqueado_hasta   TEXT,
+    login_count       INTEGER NOT NULL DEFAULT 0,
+    last_login        TEXT
+);
+"""
 
+def _ensure_db_dir():
+    DB_PATH.parent.mkdir(exist_ok=True)
 
-def ensure_db_dir():
-    os.makedirs(DB_DIR, exist_ok=True)
+def _connect():
+    conn = sqlite3.connect(str(DB_PATH), detect_types=sqlite3.PARSE_DECLTYPES)
+    conn.row_factory = sqlite3.Row
+    return conn
 
+def _kdf(password: str):
+    """Devuelve (hash_hex, salt_hex) usando las mismas params que security_hardening."""
+    salt = generate_salt()
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERS)
+    return dk.hex(), salt.hex()
 
-def create_schema(conn):
-    cur = conn.cursor()
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT UNIQUE NOT NULL,
-        pw_hash TEXT NOT NULL,
-        pw_salt TEXT NOT NULL,
-        rol TEXT NOT NULL DEFAULT 'user',
-        intentos_fallidos INTEGER NOT NULL DEFAULT 0,
-        bloqueado_hasta TEXT
-    )
-    """)
+def create_schema(conn: sqlite3.Connection):
+    conn.executescript(SCHEMA_SQL)
     conn.commit()
 
-
-def seed_user(conn, nombre, password, rol="user"):
+def seed_user(conn: sqlite3.Connection, nombre: str, password: str, rol: str = "user"):
+    """Crea o actualiza usuario semilla (idempotente)."""
     cur = conn.cursor()
     cur.execute("SELECT id FROM usuarios WHERE nombre = ?", (nombre,))
+    pw_hash_hex, pw_salt_hex = _kdf(password)
+
     if cur.fetchone():
-        print(f"[seed] usuario '{nombre}' ya existe. Se actualizará su contraseña a la nueva semilla.")
-        # opcional: actualizar hash/salt si ya existía
-        pw_hash, pw_salt = hash_password(password)
-        cur.execute("UPDATE usuarios SET pw_hash = ?, pw_salt = ? WHERE nombre = ?", (pw_hash, pw_salt, nombre))
-        conn.commit()
-        log_event("DB_ACTION", {"action": "update_user_seed", "user": nombre})
-        return
-    pw_hash, pw_salt = hash_password(password)
-    cur.execute(
-        "INSERT INTO usuarios (nombre, pw_hash, pw_salt, rol) VALUES (?,?,?,?)",
-        (nombre, pw_hash, pw_salt, rol),
-    )
+        cur.execute(
+            "UPDATE usuarios SET pw_hash = ?, pw_salt = ?, rol = ? WHERE nombre = ?",
+            (pw_hash_hex, pw_salt_hex, rol, nombre)
+        )
+        action = "update_user_seed"
+    else:
+        cur.execute(
+            "INSERT INTO usuarios (nombre, pw_hash, pw_salt, rol) VALUES (?,?,?,?)",
+            (nombre, pw_hash_hex, pw_salt_hex, rol)
+        )
+        action = "seed_user"
+
     conn.commit()
-    print(f"[seed] usuario '{nombre}' creado (password = '{password}')")
-    log_event("DB_ACTION", {"action": "seed_user", "user": nombre})
+    audit_event("DB_ACTION", {"action": action, "user": nombre})
 
-
+# ------------------------------------------------------------------ #
+# Main
+# ------------------------------------------------------------------ #
 if __name__ == "__main__":
-    ensure_db_dir()
-    # Si querés forzar recrear la DB descomenta las siguientes dos líneas:
-    # if os.path.exists(DB_PATH):
-    #     os.remove(DB_PATH)
-
-    conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
+    _ensure_db_dir()
+    conn = _connect()
     create_schema(conn)
 
-    # Usuarios semilla Grupo 7: todos con password 'grupo7'
-    usuarios = ["augusto", "maite", "maximo", "pedro", "nicole"]
-    for u in usuarios:
+    # Usuarios semilla Grupo 7 (password genérica)
+    for u in ["augusto", "maite", "maximo", "pedro", "nicole"]:
         seed_user(conn, u, "grupo7", rol="user")
 
     conn.close()
-    print("DB inicializada en", DB_PATH)
+    print(f"DB inicializada en {DB_PATH}")
